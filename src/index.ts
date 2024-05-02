@@ -1,7 +1,6 @@
-import { greetUser } from '$utils/greet';
+import { compare } from './compare';
 
 window.Webflow ||= [];
 window.Webflow.push(() => {
-  const name = 'John Doe';
-  greetUser(name);
+  compare();
 });
