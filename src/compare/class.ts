@@ -1,4 +1,4 @@
-import { type CompareRouteGroup, type CompareRouteGroups, routeConfigs } from './routeConfigs';
+import { type CompareRoute, type CompareRouteGroup, type CompareRouteGroups } from './routeConfigs';
 
 type GroupName = 'parsel' | 'other' | 'retail';
 type Input = HTMLSelectElement;
@@ -89,6 +89,7 @@ export class CompareTable {
   }
 
   private getRouteConfig(): CompareRouteGroups {
+    const { routeConfigs } = window;
     const routeConfig = routeConfigs.find((item) => item.name === this.routeName);
     if (!routeConfig) throw new Error(`No route configuration found for ${this.routeName}`);
 
