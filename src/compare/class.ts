@@ -1,4 +1,4 @@
-import { type CompareRoute, type CompareRouteGroup, type CompareRouteGroups } from './routeConfigs';
+import { type CompareRouteGroup, type CompareRouteGroups } from './routeConfigs';
 
 type GroupName = 'parsel' | 'other' | 'retail';
 type Input = HTMLSelectElement;
@@ -52,6 +52,13 @@ export class CompareTable {
       const value = groupConfig[compareOutput];
 
       switch (compareOutput) {
+        case 'cost':
+          const currency = value.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+          this.setText(output, currency);
+          break;
         case 'costTag':
           const { costTagVisibility } = groupConfig;
           if (costTagVisibility) {
@@ -61,7 +68,7 @@ export class CompareTable {
           }
           this.setText(output, value);
           break;
-        case 'speedTagVisibility':
+        case 'speedTag':
           const { speedTagVisibility } = groupConfig;
           if (speedTagVisibility) {
             output.style.removeProperty('display');

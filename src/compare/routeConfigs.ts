@@ -4,9 +4,6 @@ declare global {
   }
 }
 
-// Now you can use window.routeConfigs
-console.log(window.routeConfigs);
-
 export interface CompareRouteGroup {
   cost: number;
   costTag?: string;
