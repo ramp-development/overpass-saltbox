@@ -1,26 +1,52 @@
-import { type CompareRouteGroup, type CompareRouteGroups } from './routeConfigs';
+import { queryElement } from '$utils/queryElement';
+import { queryElements } from '$utils/queryElements';
 
-type GroupName = 'parsel' | 'other' | 'retail';
-type Input = HTMLSelectElement;
+import { type LocationConfig, locationConfigs } from './locationConfigs';
+
+type Input = HTMLSelectElement | HTMLInputElement;
 type Output = HTMLElement;
+type Values = {
+  location: string;
+  timeframe: string;
+  warehouseSuite: string;
+  officeSuite: string;
+};
 
-export class CompareTable {
+/**
+ * PLAN
+ * - get a reference to all necessary elements:
+ *  - inputs, outputs, active timeframe
+ * - save the values of the inputs
+ * - functions to update the values on change
+ * - function to set active class for timeframe
+ */
+
+export class PricingTable {
   private component: HTMLElement;
-  private origin: HTMLSelectElement;
-  private destination: HTMLSelectElement;
+  private locations: HTMLSelectElement;
+  private timeframes: HTMLInputElement[];
+  private activeTimeframe: HTMLInputElement;
+  private warehouseSuites: HTMLSelectElement;
+  private officeSuites: HTMLSelectElement;
   private inputs: Input[];
   private outputs: Output[];
-  private routeName: string;
-  private routeConfig: CompareRouteGroups;
+  private values: Values;
+  private locationConfig: LocationConfig;
 
   constructor(component: HTMLElement) {
     this.component = component;
-    this.origin = component.querySelector('select[name="origin"]') as HTMLSelectElement;
-    this.destination = component.querySelector('select[name="destination"]') as HTMLSelectElement;
-    this.inputs = [this.origin, this.destination];
-    this.outputs = [...component.querySelectorAll<HTMLElement>('[data-compare-output]')];
-    this.routeName = this.getRouteName();
-    this.routeConfig = this.getRouteConfig();
+    this.locations = queryElement('select[data-input="location"]', component) as HTMLSelectElement;
+    this.timeframes = queryElements('input[name="Billed"]', component) as HTMLInputElement[];
+    this.activeTimeframe = this.getActiveTimeframe() as HTMLInputElement;
+    this.warehouseSuites = queryElement(
+      'select[data-input="warehouse"]',
+      component
+    ) as HTMLSelectElement;
+    this.officeSuites = queryElement('select[data-input="suite"]', component) as HTMLSelectElement;
+    this.inputs = [this.locations, ...this.timeframes, this.warehouseSuites, this.officeSuites];
+    this.outputs = queryElements<HTMLElement>('[data-pricing="output"][data-output]', component);
+    this.values = this.getValues();
+    this.locationConfig = this.getLocationConfig();
     this.update = this.update.bind(this);
   }
 
@@ -29,109 +55,165 @@ export class CompareTable {
     this.bindEvents();
   }
 
+  private render(): void {
+    this.setTimeframeActiveClass();
+
+    this.outputs.forEach((output) => {
+      const type = output.dataset.output;
+      console.log(type);
+
+      if (type === 'timeframe') {
+        const timeframe =
+          this.values.timeframe === '6 Monthly'
+            ? '/6 months'
+            : this.values.timeframe === 'Yearly'
+              ? '/year'
+              : '/month';
+
+        this.setText(output, timeframe);
+        return;
+      }
+
+      if (type === 'workspace-price') {
+        const warehousePrice = this.locationConfig.warehouse[this.values.warehouseSuite];
+        const officePrice = this.locationConfig.suites[this.values.officeSuite];
+        const price = warehousePrice + officePrice;
+
+        this.setText(output, price.toLocaleString());
+      }
+    });
+
+    // this.outputs.forEach((output) => {
+    //   const { compareGroup, compareOutput } = output.dataset;
+    //   if (!compareGroup || !compareOutput) return;
+    //   const groupConfig = this.getGroupConfig(compareGroup as GroupName);
+    //   const value = groupConfig[compareOutput];
+    //   switch (compareOutput) {
+    //     case 'cost':
+    //       const currency = value.toLocaleString(undefined, {
+    //         minimumFractionDigits: 2,
+    //         maximumFractionDigits: 2,
+    //       });
+    //       this.setText(output, currency);
+    //       break;
+    //     case 'costTag':
+    //       const { costTagVisibility } = groupConfig;
+    //       if (costTagVisibility) {
+    //         output.style.removeProperty('display');
+    //       } else {
+    //         output.style.display = 'none';
+    //       }
+    //       this.setText(output, value);
+    //       break;
+    //     case 'speedTag':
+    //       const { speedTagVisibility } = groupConfig;
+    //       if (speedTagVisibility) {
+    //         output.style.removeProperty('display');
+    //       } else {
+    //         output.style.display = 'none';
+    //       }
+    //       this.setText(output, value);
+    //       break;
+    //     case 'pickup':
+    //       output.dataset.comparePickup = value;
+    //       break;
+    //     default:
+    //       this.setText(output, value);
+    //       break;
+    //   }
+    // });
+  }
+
   private bindEvents(): void {
-    this.inputs.forEach((input) => {
+    this.timeframes.forEach((input) => {
       input.addEventListener('change', () => {
-        this.update();
+        this.activeTimeframe = this.getActiveTimeframe();
+        this.setTimeframeActiveClass();
       });
+    });
+
+    this.inputs.forEach((input) => {
+      input.addEventListener('change', this.update);
     });
   }
 
   private update(): void {
-    this.routeName = this.getRouteName();
-    this.routeConfig = this.getRouteConfig();
+    this.activeTimeframe = this.getActiveTimeframe();
+    this.values = this.getValues();
+    this.locationConfig = this.getLocationConfig();
     this.render();
   }
 
-  private render(): void {
-    this.outputs.forEach((output) => {
-      const { compareGroup, compareOutput } = output.dataset;
-      if (!compareGroup || !compareOutput) return;
+  private getActiveTimeframe(): HTMLInputElement {
+    return this.timeframes.find((timeframe) => timeframe.checked) ?? this.timeframes[0];
+  }
 
-      const groupConfig = this.getGroupConfig(compareGroup as GroupName);
-      const value = groupConfig[compareOutput];
+  private getValues(): Values {
+    const values = {
+      location: this.locations.value as string,
+      timeframe: this.activeTimeframe.value as string,
+      warehouseSuite: this.warehouseSuites.value as string,
+      officeSuite: this.officeSuites.value as string,
+    };
 
-      switch (compareOutput) {
-        case 'cost':
-          const currency = value.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
-          this.setText(output, currency);
-          break;
-        case 'costTag':
-          const { costTagVisibility } = groupConfig;
-          if (costTagVisibility) {
-            output.style.removeProperty('display');
-          } else {
-            output.style.display = 'none';
-          }
-          this.setText(output, value);
-          break;
-        case 'speedTag':
-          const { speedTagVisibility } = groupConfig;
-          if (speedTagVisibility) {
-            output.style.removeProperty('display');
-          } else {
-            output.style.display = 'none';
-          }
-          this.setText(output, value);
-          break;
-        case 'pickup':
-          output.dataset.comparePickup = value;
-          break;
-        default:
-          this.setText(output, value);
-          break;
-      }
+    this.values = values;
+    return values;
+  }
+
+  private getLocationConfig(): LocationConfig {
+    // const { locationConfigs } = window;
+    const locationConfig = locationConfigs.find((item) => item.name === this.values.location);
+    if (!locationConfig) {
+      throw new Error(`No route configuration found for ${this.values.location}`);
+    }
+
+    this.locationConfig = locationConfig;
+    // this.updateLocationConfig();
+    return locationConfig;
+  }
+
+  private setTimeframeActiveClass(): void {
+    this.timeframes.forEach((timeframe) => {
+      const wrapper = timeframe.parentElement;
+      if (!wrapper) return;
+
+      wrapper.classList.remove('is-active');
     });
+
+    const { parentElement } = this.activeTimeframe;
+    if (!parentElement) return;
+
+    parentElement.classList.add('is-active');
   }
 
   private setText(output: Output, text: string) {
     output.textContent = text;
   }
 
-  private getRouteName(): string {
-    return `${this.origin.value}-${this.destination.value}`;
-  }
+  // private updateLocationConfig(): void {
+  //   // // parsel cost tag
+  //   // const costSavings = this.locationConfig.parsel.cost / this.locationConfig.retail.cost;
+  //   // const roundedSavings = Math.round(costSavings * 100);
+  //   // const costTag = `${roundedSavings}% savings`;
+  //   // const costTagVisibility = roundedSavings < 1 ? false : true;
+  //   // // parsel speed tag
+  //   // const difference = this.locationConfig.retail.speedValue - this.locationConfig.parsel.speedValue;
+  //   // const plural = difference > 1 ? 'days' : 'day';
+  //   // const speedTag = `${difference} ${plural} faster`;
+  //   // const speedTagVisibility = difference < 1 ? false : true;
+  //   // // apply
+  //   // this.locationConfig.parsel.costTag = costTag;
+  //   // this.locationConfig.parsel.costTagVisibility = costTagVisibility;
+  //   // this.locationConfig.parsel.speedTag = speedTag;
+  //   // this.locationConfig.parsel.speedTagVisibility = speedTagVisibility;
+  //   // // speed labels
+  //   // this.locationConfig.parsel.speedLabel = this.locationConfig.parsel.speedValue > 1 ? 'days' : 'day';
+  //   // this.locationConfig.other.speedLabel = this.locationConfig.other.speedValue > 1 ? 'days' : 'day';
+  //   // this.locationConfig.retail.speedLabel = this.locationConfig.retail.speedValue > 1 ? 'days' : 'day';
+  // }
 
-  private getRouteConfig(): CompareRouteGroups {
-    const { routeConfigs } = window;
-    const routeConfig = routeConfigs.find((item) => item.name === this.routeName);
-    if (!routeConfig) throw new Error(`No route configuration found for ${this.routeName}`);
-
-    this.routeConfig = routeConfig.outputs;
-    this.updateRouteConfig();
-    return routeConfig.outputs;
-  }
-
-  private updateRouteConfig(): void {
-    // parsel cost tag
-    const costSavings = this.routeConfig.parsel.cost / this.routeConfig.retail.cost;
-    const roundedSavings = Math.round(costSavings * 100);
-    const costTag = `${roundedSavings}% savings`;
-    const costTagVisibility = roundedSavings < 1 ? false : true;
-
-    // parsel speed tag
-    const difference = this.routeConfig.retail.speedValue - this.routeConfig.parsel.speedValue;
-    const plural = difference > 1 ? 'days' : 'day';
-    const speedTag = `${difference} ${plural} faster`;
-    const speedTagVisibility = difference < 1 ? false : true;
-
-    // apply
-    this.routeConfig.parsel.costTag = costTag;
-    this.routeConfig.parsel.costTagVisibility = costTagVisibility;
-    this.routeConfig.parsel.speedTag = speedTag;
-    this.routeConfig.parsel.speedTagVisibility = speedTagVisibility;
-
-    // speed labels
-    this.routeConfig.parsel.speedLabel = this.routeConfig.parsel.speedValue > 1 ? 'days' : 'day';
-    this.routeConfig.other.speedLabel = this.routeConfig.other.speedValue > 1 ? 'days' : 'day';
-    this.routeConfig.retail.speedLabel = this.routeConfig.retail.speedValue > 1 ? 'days' : 'day';
-  }
-
-  private getGroupConfig(groupName: GroupName): CompareRouteGroup {
-    const routeGroupConfig = this.routeConfig[groupName];
-    return routeGroupConfig;
-  }
+  // private getGroupConfig(groupName: GroupName): CompareRouteGroup {
+  //   const routeGroupConfig = this.locationConfig[groupName];
+  //   return routeGroupConfig;
+  // }
 }

@@ -1,15 +1,18 @@
-import { CompareTable } from './class';
+import { queryElements } from '$utils/queryElements';
 
-export const compare = () => {
+import { PricingTable } from './class';
+
+export const pricing = () => {
   // eslint-disable-next-line no-console
-  console.log('compare');
+  console.log('pricing');
 
-  const attr = 'data-compare';
-  const components = [...document.querySelectorAll<HTMLDivElement>(`[${attr}="component"]`)];
-  if (components.length === 0) return;
+  const attr = 'data-pricing';
+  const components = queryElements<HTMLDivElement>(`[${attr}="component"]`);
 
-  components.forEach((component) => {
-    const compareTable = new CompareTable(component);
-    compareTable.init();
-  });
+  setTimeout(() => {
+    components.forEach((component) => {
+      const pricingTable = new PricingTable(component);
+      pricingTable.init();
+    });
+  }, 500);
 };
