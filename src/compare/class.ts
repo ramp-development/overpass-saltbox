@@ -119,49 +119,23 @@ export class PricingTable {
         // const warehousePrice = this.locationConfig. [this.values.warehouseSuite];
         const combinationConfig = this.getCombinationConfig();
         if (!combinationConfig) return;
-        this.setText(output, combinationConfig.total.toLocaleString());
+
+        let discount = 0;
+        switch (this.values.timeframe) {
+          case 'monthly':
+            discount = 0;
+            break;
+          case '6-months':
+            discount = 0.1;
+            break;
+          case 'yearly':
+            discount = 0.2;
+            break;
+        }
+
+        this.setText(output, (combinationConfig.total * (1 - discount)).toLocaleString());
       }
     });
-
-    // this.outputs.forEach((output) => {
-    //   const { compareGroup, compareOutput } = output.dataset;
-    //   if (!compareGroup || !compareOutput) return;
-    //   const groupConfig = this.getGroupConfig(compareGroup as GroupName);
-    //   const value = groupConfig[compareOutput];
-    //   switch (compareOutput) {
-    //     case 'cost':
-    //       const currency = value.toLocaleString(undefined, {
-    //         minimumFractionDigits: 2,
-    //         maximumFractionDigits: 2,
-    //       });
-    //       this.setText(output, currency);
-    //       break;
-    //     case 'costTag':
-    //       const { costTagVisibility } = groupConfig;
-    //       if (costTagVisibility) {
-    //         output.style.removeProperty('display');
-    //       } else {
-    //         output.style.display = 'none';
-    //       }
-    //       this.setText(output, value);
-    //       break;
-    //     case 'speedTag':
-    //       const { speedTagVisibility } = groupConfig;
-    //       if (speedTagVisibility) {
-    //         output.style.removeProperty('display');
-    //       } else {
-    //         output.style.display = 'none';
-    //       }
-    //       this.setText(output, value);
-    //       break;
-    //     case 'pickup':
-    //       output.dataset.comparePickup = value;
-    //       break;
-    //     default:
-    //       this.setText(output, value);
-    //       break;
-    //   }
-    // });
   }
 
   private bindEvents(): void {
@@ -185,9 +159,9 @@ export class PricingTable {
       this.warehouseChange();
     });
 
-    // this.officeInput.addEventListener('change', () => {
-    //   this.officeChange();
-    // });
+    this.officeInput.addEventListener('change', () => {
+      this.officeChange();
+    });
   }
 
   private locationChange(): void {
@@ -220,6 +194,11 @@ export class PricingTable {
   }
 
   private warehouseChange(): void {
+    // reset all options if the warehouse is on the default value
+    if (this.warehouseInput.selectedIndex === 0) {
+      this.locationChange();
+    }
+
     // disable all options for the office select
     this.disableAllOptions(this.officeInput);
 
@@ -240,6 +219,36 @@ export class PricingTable {
     this.officeOptions.forEach((option) => {
       if (option.element.disabled && option.element.selected) {
         this.officeInput.selectedIndex = 0;
+      }
+    });
+  }
+
+  private officeChange(): void {
+    console.log('office change');
+    // disable all options for the warehouse select
+    this.disableAllOptions(this.warehouseInput);
+
+    // if there is no location config, return
+    if (!this.locationConfig) return;
+
+    // get all combinations for the current location
+    const { combinations } = this.locationConfig;
+    combinations.forEach((combination) => {
+      // if the office does not match the current office, return
+      if (combination.office !== this.values.officeSuite) return;
+
+      // find the warehouse option and enable it
+      const warehouseOption = this.warehouseOptions.find(
+        (option) => option.value === combination.warehouse
+      );
+      if (warehouseOption) warehouseOption.element.disabled = false;
+    });
+
+    // this.locationChange();
+
+    this.warehouseOptions.forEach((option) => {
+      if (option.element.disabled && option.element.selected) {
+        this.warehouseInput.selectedIndex = 0;
       }
     });
   }
