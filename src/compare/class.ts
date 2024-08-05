@@ -1,7 +1,7 @@
 import { queryElement } from '$utils/queryElement';
 import { queryElements } from '$utils/queryElements';
 
-import { type LocationConfig, locationConfigs } from './locationConfigs';
+import { type Combination, type LocationConfig, locationConfigs } from './locationConfigs';
 
 type Input = HTMLSelectElement | HTMLInputElement;
 type Output = HTMLElement;
@@ -10,6 +10,12 @@ type Values = {
   timeframe: string;
   warehouseSuite: string;
   officeSuite: string;
+};
+
+type OptionMap = {
+  element: HTMLOptionElement;
+  value: string;
+  text: string | null;
 };
 
 /**
@@ -21,46 +27,81 @@ type Values = {
  * - function to set active class for timeframe
  */
 
+/**
+ * @description
+ * This class will handle the pricing table functionality.
+ *
+ * Plan:
+ *
+ * 1. On change of the location
+ * - get the locationConfig
+ * - update the warehouse and office select options
+ * - when a sub option is selected, update the other sub options
+ */
+
+/**
+ * @todo default pricing values?
+ * @todo update warehouse selector
+ * @todo update office selector
+ * @todo warehouse and office selects to prompt selection of location first
+ */
+
 export class PricingTable {
   private component: HTMLElement;
-  private locations: HTMLSelectElement;
-  private timeframes: HTMLInputElement[];
+  private locationInput: HTMLSelectElement;
+  private timeframeInputs: HTMLInputElement[];
   private activeTimeframe: HTMLInputElement;
-  private warehouseSuites: HTMLSelectElement;
-  private officeSuites: HTMLSelectElement;
+  private warehouseInput: HTMLSelectElement;
+  private warehouseOptions: OptionMap[];
+  private officeInput: HTMLSelectElement;
+  private officeOptions: OptionMap[];
   private inputs: Input[];
   private outputs: Output[];
   private values: Values;
-  private locationConfig: LocationConfig;
+  private locationConfig: LocationConfig | undefined;
 
   constructor(component: HTMLElement) {
     this.component = component;
-    this.locations = queryElement('select[data-input="location"]', component) as HTMLSelectElement;
-    this.timeframes = queryElements('input[name="Billed"]', component) as HTMLInputElement[];
+    this.locationInput = queryElement('select[name="location"]', component) as HTMLSelectElement;
+    this.timeframeInputs = queryElements('input[name="billed"]', component) as HTMLInputElement[];
     this.activeTimeframe = this.getActiveTimeframe() as HTMLInputElement;
-    this.warehouseSuites = queryElement(
-      'select[data-input="warehouse"]',
-      component
-    ) as HTMLSelectElement;
-    this.officeSuites = queryElement('select[data-input="suite"]', component) as HTMLSelectElement;
-    this.inputs = [this.locations, ...this.timeframes, this.warehouseSuites, this.officeSuites];
+    this.warehouseInput = queryElement('select[name="warehouse"]', component) as HTMLSelectElement;
+    this.warehouseOptions = this.getOptions(this.warehouseInput);
+    this.officeInput = queryElement('select[name="office"]', component) as HTMLSelectElement;
+    this.officeOptions = this.getOptions(this.officeInput);
+    this.inputs = [
+      this.locationInput,
+      ...this.timeframeInputs,
+      this.warehouseInput,
+      this.officeInput,
+    ];
     this.outputs = queryElements<HTMLElement>('[data-pricing="output"][data-output]', component);
     this.values = this.getValues();
     this.locationConfig = this.getLocationConfig();
     this.update = this.update.bind(this);
+
+    this.init();
   }
 
-  public init(): void {
+  private getOptions(select: HTMLSelectElement): OptionMap[] {
+    const options = queryElements('option', select) as HTMLOptionElement[];
+    return options.map((option) => {
+      return {
+        element: option,
+        value: option.value,
+        text: option.textContent,
+      };
+    });
+  }
+
+  private init(): void {
     this.render();
     this.bindEvents();
   }
 
   private render(): void {
-    this.setTimeframeActiveClass();
-
     this.outputs.forEach((output) => {
       const type = output.dataset.output;
-      console.log(type);
 
       if (type === 'timeframe') {
         const timeframe =
@@ -75,11 +116,10 @@ export class PricingTable {
       }
 
       if (type === 'workspace-price') {
-        const warehousePrice = this.locationConfig.warehouse[this.values.warehouseSuite];
-        const officePrice = this.locationConfig.suites[this.values.officeSuite];
-        const price = warehousePrice + officePrice;
-
-        this.setText(output, price.toLocaleString());
+        // const warehousePrice = this.locationConfig. [this.values.warehouseSuite];
+        const combinationConfig = this.getCombinationConfig();
+        if (!combinationConfig) return;
+        this.setText(output, combinationConfig.total.toLocaleString());
       }
     });
 
@@ -125,15 +165,90 @@ export class PricingTable {
   }
 
   private bindEvents(): void {
-    this.timeframes.forEach((input) => {
-      input.addEventListener('change', () => {
-        this.activeTimeframe = this.getActiveTimeframe();
-        this.setTimeframeActiveClass();
-      });
-    });
+    /**
+     * 1. on change of location - update warehouse and office options
+     * 2. on change of warehouse and office - update warehouse or office options
+     */
 
     this.inputs.forEach((input) => {
       input.addEventListener('change', this.update);
+    });
+
+    this.locationChange();
+
+    this.locationInput.addEventListener('change', () => {
+      this.locationChange();
+      this.warehouseChange();
+    });
+
+    this.warehouseInput.addEventListener('change', () => {
+      this.warehouseChange();
+    });
+
+    // this.officeInput.addEventListener('change', () => {
+    //   this.officeChange();
+    // });
+  }
+
+  private locationChange(): void {
+    // diable all options for both selects
+    this.disableAllOptions(this.warehouseInput);
+    this.disableAllOptions(this.officeInput);
+
+    // if there is no location config, return
+    if (!this.locationConfig) return;
+
+    // get all combinations for the current location
+    const { combinations } = this.locationConfig;
+    combinations.forEach((combination) => {
+      // find the warehouse option and enable it
+      const warehouseOption = this.warehouseOptions.find(
+        (option) => option.value === combination.warehouse
+      );
+      if (warehouseOption) warehouseOption.element.disabled = false;
+
+      // find the office option and enable it
+      const officeOption = this.officeOptions.find((option) => option.value === combination.office);
+      if (officeOption) officeOption.element.disabled = false;
+    });
+
+    this.warehouseOptions.forEach((option) => {
+      if (option.element.disabled && option.element.selected) {
+        this.warehouseInput.selectedIndex = 0;
+      }
+    });
+  }
+
+  private warehouseChange(): void {
+    // disable all options for the office select
+    this.disableAllOptions(this.officeInput);
+
+    // if there is no location config, return
+    if (!this.locationConfig) return;
+
+    // get all combinations for the current location
+    const { combinations } = this.locationConfig;
+    combinations.forEach((combination) => {
+      // if the warehouse does not match the current warehouse, return
+      if (combination.warehouse !== this.values.warehouseSuite) return;
+
+      // find the office option and enable it
+      const officeOption = this.officeOptions.find((option) => option.value === combination.office);
+      if (officeOption) officeOption.element.disabled = false;
+    });
+
+    this.officeOptions.forEach((option) => {
+      if (option.element.disabled && option.element.selected) {
+        this.officeInput.selectedIndex = 0;
+      }
+    });
+  }
+
+  private disableAllOptions(select: HTMLSelectElement): void {
+    const options = queryElements('option', select) as HTMLOptionElement[];
+    options.forEach((option, index) => {
+      if (index === 0) return;
+      option.disabled = true;
     });
   }
 
@@ -145,46 +260,67 @@ export class PricingTable {
   }
 
   private getActiveTimeframe(): HTMLInputElement {
-    return this.timeframes.find((timeframe) => timeframe.checked) ?? this.timeframes[0];
+    return this.timeframeInputs.find((timeframe) => timeframe.checked) ?? this.timeframeInputs[0];
   }
 
   private getValues(): Values {
     const values = {
-      location: this.locations.value as string,
+      location: this.locationInput.value as string,
       timeframe: this.activeTimeframe.value as string,
-      warehouseSuite: this.warehouseSuites.value as string,
-      officeSuite: this.officeSuites.value as string,
+      warehouseSuite: this.warehouseInput.value as string,
+      officeSuite: this.officeInput.value as string,
     };
 
     this.values = values;
     return values;
   }
 
-  private getLocationConfig(): LocationConfig {
-    // const { locationConfigs } = window;
-    const locationConfig = locationConfigs.find((item) => item.name === this.values.location);
+  private getLocationConfig(): LocationConfig | undefined {
+    const locationConfig = locationConfigs.find((item) => item.id === this.values.location);
     if (!locationConfig) {
-      throw new Error(`No route configuration found for ${this.values.location}`);
+      console.error(`No location configuration found for ${this.values.location}`);
+      return;
     }
 
-    this.locationConfig = locationConfig;
-    // this.updateLocationConfig();
     return locationConfig;
   }
 
-  private setTimeframeActiveClass(): void {
-    this.timeframes.forEach((timeframe) => {
-      const wrapper = timeframe.parentElement;
-      if (!wrapper) return;
+  private getCombinationConfig(): Combination | undefined {
+    const { locationConfig } = this;
+    if (!locationConfig) {
+      console.error(`No location configuration found for ${this.values.location}`);
+      return;
+    }
 
-      wrapper.classList.remove('is-active');
+    const combinationConfig = locationConfig.combinations.find((item) => {
+      return (
+        item.warehouse === this.values.warehouseSuite && item.office === this.values.officeSuite
+      );
     });
 
-    const { parentElement } = this.activeTimeframe;
-    if (!parentElement) return;
+    if (!combinationConfig) {
+      console.error(
+        `No combination configuration found for ${this.values.warehouseSuite} and ${this.values.officeSuite}`
+      );
+      return;
+    }
 
-    parentElement.classList.add('is-active');
+    return combinationConfig;
   }
+
+  // private setTimeframeActiveClass(): void {
+  //   this.timeframes.forEach((timeframe) => {
+  //     const wrapper = timeframe.parentElement;
+  //     if (!wrapper) return;
+
+  //     wrapper.classList.remove('is-active');
+  //   });
+
+  //   const { parentElement } = this.activeTimeframe;
+  //   if (!parentElement) return;
+
+  //   parentElement.classList.add('is-active');
+  // }
 
   private setText(output: Output, text: string) {
     output.textContent = text;
