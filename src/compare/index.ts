@@ -7,12 +7,9 @@ export const pricing = () => {
   console.log('pricing');
 
   const attr = 'data-pricing';
-  // const components = queryElements<HTMLDivElement>(`[${attr}="component"]`);
-  const components = queryElements<HTMLBodyElement>('body');
+  const components = queryElements<HTMLDivElement>(`[${attr}="component"]`);
 
   components.forEach((component) => {
-    console.log(component);
-    const pricingTable = new PricingTable(component);
-    console.log(pricingTable);
+    new PricingTable(component);
   });
 };
