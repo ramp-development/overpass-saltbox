@@ -17,8 +17,12 @@ export class PricingTable {
   private activeTimeframe: HTMLInputElement;
   private warehouseInput: HTMLSelectElement;
   private warehouseOptions: OptionMap[];
+  private warehouseDefaultValue: string;
+  private warehouseValueUpdated: boolean;
   private officeInput: HTMLSelectElement;
   private officeOptions: OptionMap[];
+  private officeDefaultValue: string;
+  private officeValueUpdated: boolean;
   private inputs: Input[];
   private outputs: Output[];
   private values: Values;
@@ -43,8 +47,12 @@ export class PricingTable {
     this.activeTimeframe = this.getActiveTimeframe() as HTMLInputElement;
     this.warehouseInput = queryElement('select[name="warehouse"]', component) as HTMLSelectElement;
     this.warehouseOptions = this.getOptions(this.warehouseInput);
+    this.warehouseDefaultValue = this.warehouseInput.dataset.default as string;
+    this.warehouseValueUpdated = false;
     this.officeInput = queryElement('select[name="office"]', component) as HTMLSelectElement;
     this.officeOptions = this.getOptions(this.officeInput);
+    this.officeDefaultValue = this.officeInput.dataset.default as string;
+    this.officeValueUpdated = false;
     this.inputs = [
       this.logisticSupportInput,
       this.locationInput,
@@ -154,7 +162,13 @@ export class PricingTable {
     this.locationChange();
     this.setPricePrompt();
 
+    let locationChangeCount = 0;
     this.locationInput.addEventListener('change', () => {
+      if (locationChangeCount === 0) {
+        this.setDefaultWarehouse();
+        this.setDefaultOffice();
+        locationChangeCount += 1;
+      }
       this.locationChange();
       this.warehouseChange();
       this.setPricePrompt();
@@ -229,6 +243,7 @@ export class PricingTable {
       if (officeOption) officeOption.element.disabled = false;
     });
 
+    // reset the warehouse select to the default value if the selected option is disabled
     this.warehouseOptions.forEach((option) => {
       if (option.element.disabled && option.element.selected) {
         this.warehouseInput.selectedIndex = 0;
@@ -259,6 +274,7 @@ export class PricingTable {
       if (officeOption) officeOption.element.disabled = false;
     });
 
+    // this.setDefaultOffice();
     this.officeOptions.forEach((option) => {
       if (option.element.disabled && option.element.selected) {
         this.officeInput.selectedIndex = 0;
@@ -286,13 +302,37 @@ export class PricingTable {
       if (warehouseOption) warehouseOption.element.disabled = false;
     });
 
-    this.locationChange();
-
     this.warehouseOptions.forEach((option) => {
       if (option.element.disabled && option.element.selected) {
         this.warehouseInput.selectedIndex = 0;
       }
     });
+  }
+
+  private setDefaultWarehouse(): void {
+    if (this.warehouseValueUpdated) return;
+
+    this.warehouseOptions.forEach((option, index) => {
+      if (option.value === this.warehouseDefaultValue) {
+        this.warehouseInput.selectedIndex = index;
+        this.warehouseValueUpdated = true;
+      }
+    });
+
+    this.warehouseInput.dispatchEvent(new Event('change'));
+  }
+
+  private setDefaultOffice(): void {
+    if (this.officeValueUpdated) return;
+
+    this.officeOptions.forEach((option, index) => {
+      if (option.value === this.officeDefaultValue) {
+        this.officeInput.selectedIndex = index;
+        this.officeValueUpdated = true;
+      }
+    });
+
+    this.officeInput.dispatchEvent(new Event('change'));
   }
 
   private disableAllOptions(select: HTMLSelectElement): void {
@@ -346,6 +386,8 @@ export class PricingTable {
       console.error(`No location configuration found for ${this.values.location}`);
       return;
     }
+
+    console.log(this.values.warehouseSuite, this.values.officeSuite);
 
     const combinationConfig = locationConfig.combinations.find((item) => {
       return (
